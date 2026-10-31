@@ -403,7 +403,7 @@ class _InventoryPageState extends State<InventoryPage> {
                   maxLength: 150,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'e.g. IW25030199',
+                    hintText: 'e.g. IW25',
                     counterText: '',
                     suffixIcon: IconButton(
                       onPressed: _openScanner,
