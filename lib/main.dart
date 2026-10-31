@@ -141,9 +141,7 @@ class _InventoryPageState extends State<InventoryPage> {
       _barcodeController.clear();
       await _loadScans();
       if (!mounted) return;
-      _showMessage(
-        '${_scans.isEmpty ? 'Beacon' : 'Scan'} recorded successfully.',
-      );
+      _showMessage('Movement recorded successfully.');
     } on StateError catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
     } on Exception catch (error) {
@@ -200,6 +198,10 @@ class _InventoryPageState extends State<InventoryPage> {
           text: 'Beacon inventory scan history',
         ),
       );
+    } on StateError catch (error) {
+      if (mounted) {
+        _showMessage('Could not export scans: $error', isError: true);
+      }
     } on Exception catch (error) {
       if (mounted) {
         _showMessage('Could not export scans: $error', isError: true);

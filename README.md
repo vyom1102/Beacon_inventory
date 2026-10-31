@@ -1,6 +1,6 @@
 # Beacon Inventory
 
-A native Flutter app for recording beacon movements on Android and iOS. The app scans barcodes with the phone camera, including Code 128 and Code 39 identifiers such as `IW25030199`, and stores movement history in a local SQLite database on the device.
+A native Flutter app for recording beacon movements on Android and iOS. The app scans Code 128, Code 39, and Code 93 barcodes with a camera scan window tuned for faster beacon reads, including identifiers such as `IW25030199`. Movement history is stored in a local SQLite database on the device.
 
 Each scan records its barcode, In/Out status, venue, reason, and timestamp. Repeating the same status for a beacon is blocked. Export the scan history as an Excel spreadsheet through the device's share sheet.
 

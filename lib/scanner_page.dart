@@ -23,12 +23,6 @@ class _ScannerPageState extends State<ScannerPage> {
         BarcodeFormat.code128,
         BarcodeFormat.code39,
         BarcodeFormat.code93,
-        BarcodeFormat.ean13,
-        BarcodeFormat.ean8,
-        BarcodeFormat.upcA,
-        BarcodeFormat.upcE,
-        BarcodeFormat.itf14,
-        BarcodeFormat.qrCode,
       ],
     );
   }
@@ -62,43 +56,55 @@ class _ScannerPageState extends State<ScannerPage> {
       body: Column(
         children: [
           Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              alignment: Alignment.center,
-              children: [
-                MobileScanner(
-                  controller: _controller,
-                  onDetect: _onDetect,
-                  onDetectError: (error, stackTrace) {
-                    debugPrint('Barcode detection error: $error');
-                  },
-                  errorBuilder: (context, error) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Camera could not start: ${error.errorCode.name}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-                IgnorePointer(
-                  child: Center(
-                    child: Container(
-                      width: MediaQuery.sizeOf(context).width * 0.82,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0xFFB8EA68),
-                          width: 3,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = constraints.biggest;
+                final scanWindow = Rect.fromCenter(
+                  center: size.center(Offset.zero),
+                  width: size.width * 0.9,
+                  height: size.height * 0.32,
+                );
+                return Stack(
+                  fit: StackFit.expand,
+                  alignment: Alignment.center,
+                  children: [
+                    MobileScanner(
+                      controller: _controller,
+                      scanWindow: scanWindow,
+                      scanWindowUpdateThreshold: 10,
+                      onDetect: _onDetect,
+                      onDetectError: (error, stackTrace) {
+                        debugPrint('Barcode detection error: $error');
+                      },
+                      errorBuilder: (context, error) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            'Camera could not start: ${error.errorCode.name}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                  ),
-                ),
-              ],
+                    IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          width: scanWindow.width,
+                          height: scanWindow.height,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: const Color(0xFFB8EA68),
+                              width: 3,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const Padding(
