@@ -7,6 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'inventory_store.dart';
+import 'inventory_api.dart';
+import 'dashboard_page.dart';
+import 'beacon_presence.dart';
 import 'scanner_page.dart';
 
 const _forest = Color(0xFF173B32);
@@ -56,7 +59,7 @@ class BeaconInventoryApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const InventoryPage(),
+      home: DashboardPage(inventoryBuilder: (_) => const InventoryPage()),
     );
   }
 }
@@ -71,11 +74,34 @@ class InventoryPage extends StatefulWidget {
 class _InventoryPageState extends State<InventoryPage> {
   final _formKey = GlobalKey<FormState>();
   final _venueController = TextEditingController();
+  final _personController = TextEditingController();
   final _reasonController = TextEditingController();
+  final _referenceController = TextEditingController();
+  final _remarksController = TextEditingController();
+  final _bluetoothIdController = TextEditingController();
   final _barcodeController = TextEditingController();
 
   List<ScanRecord> _scans = [];
   MovementDirection _direction = MovementDirection.inbound;
+  String? _selectedReason;
+  List<String> get _reasonOptions => _direction == MovementDirection.inbound
+      ? const [
+          'New Purchase',
+          'Extra Return from Installation',
+          'Not Working',
+          'Repaired Lot',
+          'Removed from Demo Deployment',
+          'Return from Internal Testing',
+          'Other',
+        ]
+      : const [
+          'New Deployment',
+          'Demo Deployment',
+          'Sent for Repair',
+          'Issued for Internal Testing',
+          'Replacement in Existing Deployment',
+          'Other',
+        ];
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
@@ -97,14 +123,20 @@ class _InventoryPageState extends State<InventoryPage> {
   @override
   void dispose() {
     _venueController.dispose();
+    _personController.dispose();
     _reasonController.dispose();
+    _referenceController.dispose();
+    _remarksController.dispose();
+    _bluetoothIdController.dispose();
     _barcodeController.dispose();
     super.dispose();
   }
 
   Future<void> _loadScans() async {
     try {
-      final scans = await InventoryStore.instance.getScans();
+      final scans = InventoryApi.isConfigured
+          ? await InventoryApi().recentMovements()
+          : await InventoryStore.instance.getScans();
       if (!mounted) return;
       setState(() {
         _scans = scans;
@@ -132,10 +164,19 @@ class _InventoryPageState extends State<InventoryPage> {
     if (!_formKey.currentState!.validate() || _saving) return;
     setState(() => _saving = true);
     try {
-      await InventoryStore.instance.saveScan(
+      final save = InventoryApi.isConfigured
+          ? InventoryApi().saveMovement
+          : InventoryStore.instance.saveScan;
+      await save(
         barcode: _barcodeController.text.trim(),
         venue: _venueController.text.trim(),
-        reason: _reasonController.text.trim(),
+        personName: _personController.text.trim(),
+        reason: _selectedReason == 'Other'
+            ? _reasonController.text.trim()
+            : _selectedReason!,
+        reference: _referenceController.text.trim(),
+        remarks: _remarksController.text.trim(),
+        bluetoothId: _bluetoothIdController.text.trim(),
         direction: _direction,
       );
       _barcodeController.clear();
@@ -167,7 +208,11 @@ class _InventoryPageState extends State<InventoryPage> {
         TextCellValue('Barcode'),
         TextCellValue('Status'),
         TextCellValue('Venue name'),
+        TextCellValue('Venue direction'),
+        TextCellValue('Person name'),
         TextCellValue('Reason'),
+        TextCellValue('Reference / Document No.'),
+        TextCellValue('Remarks'),
       ]);
       for (final scan in _scans.reversed) {
         sheet.appendRow([
@@ -175,7 +220,13 @@ class _InventoryPageState extends State<InventoryPage> {
           TextCellValue(scan.barcode),
           TextCellValue(scan.direction.label.toUpperCase()),
           TextCellValue(scan.venue),
+          TextCellValue(
+            scan.direction == MovementDirection.inbound ? 'From' : 'To',
+          ),
+          TextCellValue(scan.personName),
           TextCellValue(scan.reason),
+          TextCellValue(scan.reference),
+          TextCellValue(scan.remarks),
         ]);
       }
 
@@ -363,8 +414,10 @@ class _InventoryPageState extends State<InventoryPage> {
               ),
             ],
             selected: {_direction},
-            onSelectionChanged: (selection) =>
-                setState(() => _direction = selection.first),
+            onSelectionChanged: (selection) => setState(() {
+              _direction = selection.first;
+              _selectedReason = null;
+            }),
           ),
           const SizedBox(height: 18),
           Form(
@@ -372,7 +425,11 @@ class _InventoryPageState extends State<InventoryPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _fieldLabel('VENUE NAME'),
+                _fieldLabel(
+                  _direction == MovementDirection.inbound
+                      ? 'FROM VENUE NAME'
+                      : 'TO VENUE NAME',
+                ),
                 TextFormField(
                   controller: _venueController,
                   textCapitalization: TextCapitalization.words,
@@ -384,16 +441,70 @@ class _InventoryPageState extends State<InventoryPage> {
                   validator: (value) => _required(value, 'Enter a venue name.'),
                 ),
                 const SizedBox(height: 14),
-                _fieldLabel('REASON'),
+                _fieldLabel('PERSON RESPONSIBLE'),
                 TextFormField(
-                  controller: _reasonController,
-                  textCapitalization: TextCapitalization.sentences,
-                  maxLength: 300,
+                  controller: _personController,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 150,
                   decoration: const InputDecoration(
-                    hintText: 'e.g. Returned from event',
+                    hintText: 'Person responsible for this movement',
                     counterText: '',
                   ),
-                  validator: (value) => _required(value, 'Enter a reason.'),
+                  validator: (value) =>
+                      _required(value, 'Enter the person’s name.'),
+                ),
+                const SizedBox(height: 14),
+                _fieldLabel('REASON'),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedReason,
+                  decoration: const InputDecoration(
+                    hintText: 'Select a reason',
+                  ),
+                  items: _reasonOptions
+                      .map(
+                        (reason) => DropdownMenuItem(
+                          value: reason,
+                          child: Text(reason),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => _selectedReason = value),
+                  validator: (value) =>
+                      value == null ? 'Select a reason.' : null,
+                ),
+                if (_selectedReason == 'Other') ...[
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _reasonController,
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLength: 300,
+                    decoration: const InputDecoration(
+                      hintText: 'Type your reason',
+                      counterText: '',
+                    ),
+                    validator: (value) => _required(value, 'Enter a reason.'),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                _fieldLabel('REFERENCE / DOCUMENT NO. (OPTIONAL)'),
+                TextFormField(
+                  controller: _referenceController,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    hintText: 'PO, invoice, deployment or repair reference',
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _fieldLabel('REMARKS (OPTIONAL)'),
+                TextFormField(
+                  controller: _remarksController,
+                  maxLength: 300,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    hintText: 'Additional details',
+                    counterText: '',
+                  ),
                 ),
                 const SizedBox(height: 14),
                 _fieldLabel('BEACON BARCODE'),
@@ -425,6 +536,40 @@ class _InventoryPageState extends State<InventoryPage> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 14),
+                _fieldLabel('BLUETOOTH ID / MAC (OPTIONAL)'),
+                TextFormField(
+                  controller: _bluetoothIdController,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Use when the beacon does not advertise its barcode',
+                    counterText: '',
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: BeaconPresence.instance,
+                  builder: (context, _) =>
+                      _barcodeController.text.trim().isNotEmpty &&
+                          BeaconPresence.instance.isActive(
+                            _barcodeController.text,
+                            bluetoothId:
+                                _bluetoothIdController.text.trim().isNotEmpty
+                                ? _bluetoothIdController.text.trim()
+                                : knownBeacon?.bluetoothId ?? '',
+                          )
+                      ? const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Beacon active · detected nearby',
+                            style: TextStyle(
+                              color: Color(0xFF467B25),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
@@ -538,7 +683,8 @@ class _InventoryPageState extends State<InventoryPage> {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${scan.venue} · ${scan.reason}',
+                  '${isIn ? 'From' : 'To'} ${scan.venue} · ${scan.reason}'
+                  '${scan.personName.isEmpty ? '' : ' · ${scan.personName}'}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

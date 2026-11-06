@@ -18,7 +18,11 @@ class ScanRecord {
     required this.barcode,
     required this.direction,
     required this.venue,
+    required this.personName,
     required this.reason,
+    required this.reference,
+    required this.remarks,
+    required this.bluetoothId,
     required this.scannedAt,
   });
 
@@ -26,7 +30,11 @@ class ScanRecord {
   final String barcode;
   final MovementDirection direction;
   final String venue;
+  final String personName;
   final String reason;
+  final String reference;
+  final String remarks;
+  final String bluetoothId;
   final DateTime scannedAt;
 
   factory ScanRecord.fromMap(Map<String, Object?> row) => ScanRecord(
@@ -36,7 +44,11 @@ class ScanRecord {
         ? MovementDirection.inbound
         : MovementDirection.outbound,
     venue: row['venue']! as String,
+    personName: (row['person_name'] as String?) ?? '',
     reason: row['reason']! as String,
+    reference: (row['reference'] as String?) ?? '',
+    remarks: (row['remarks'] as String?) ?? '',
+    bluetoothId: (row['bluetooth_id'] as String?) ?? '',
     scannedAt: DateTime.parse(row['scanned_at']! as String),
   );
 }
@@ -53,7 +65,7 @@ class InventoryStore {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       p.join(databasePath, _databaseName),
-      version: 1,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE scans (
@@ -61,13 +73,37 @@ class InventoryStore {
             barcode TEXT NOT NULL,
             direction TEXT NOT NULL CHECK(direction IN ('in', 'out')),
             venue TEXT NOT NULL,
+            person_name TEXT NOT NULL,
             reason TEXT NOT NULL,
+            reference TEXT NOT NULL DEFAULT '',
+            remarks TEXT NOT NULL DEFAULT '',
+            bluetooth_id TEXT NOT NULL DEFAULT '',
             scanned_at TEXT NOT NULL
           )
         ''');
         await db.execute(
           'CREATE INDEX scans_barcode ON scans(barcode, id DESC)',
         );
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            "ALTER TABLE scans ADD COLUMN person_name TEXT NOT NULL DEFAULT ''",
+          );
+        }
+        if (oldVersion < 3) {
+          await db.execute(
+            "ALTER TABLE scans ADD COLUMN reference TEXT NOT NULL DEFAULT ''",
+          );
+          await db.execute(
+            "ALTER TABLE scans ADD COLUMN remarks TEXT NOT NULL DEFAULT ''",
+          );
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+            "ALTER TABLE scans ADD COLUMN bluetooth_id TEXT NOT NULL DEFAULT ''",
+          );
+        }
       },
     );
     return _database!;
@@ -81,19 +117,26 @@ class InventoryStore {
   Future<void> saveScan({
     required String barcode,
     required String venue,
+    required String personName,
     required String reason,
+    required String reference,
+    required String remarks,
+    required String bluetoothId,
     required MovementDirection direction,
   }) async {
     final db = await _db;
     await db.transaction((transaction) async {
       final previous = await transaction.query(
         'scans',
-        columns: ['direction'],
+        columns: ['direction', 'bluetooth_id'],
         where: 'barcode = ?',
         whereArgs: [barcode],
         orderBy: 'id DESC',
         limit: 1,
       );
+      if (previous.isEmpty && direction == MovementDirection.outbound) {
+        throw StateError('Mark this beacon IN before marking it OUT.');
+      }
       if (previous.isNotEmpty &&
           previous.first['direction'] == direction.value) {
         throw StateError(
@@ -105,7 +148,13 @@ class InventoryStore {
         'barcode': barcode,
         'direction': direction.value,
         'venue': venue,
+        'person_name': personName,
         'reason': reason,
+        'reference': reference,
+        'remarks': remarks,
+        'bluetooth_id': bluetoothId.isNotEmpty
+            ? bluetoothId
+            : (previous.isEmpty ? '' : previous.first['bluetooth_id'] ?? ''),
         'scanned_at': DateTime.now().toUtc().toIso8601String(),
       });
     });

@@ -18,6 +18,8 @@
 	<string>beacon_inventory</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Beacon Inventory uses the camera to scan beacon barcodes.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Beacon Inventory scans nearby beacons while the app is open to show whether a scanned beacon is active.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
