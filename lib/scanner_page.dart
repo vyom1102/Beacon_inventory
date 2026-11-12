@@ -9,29 +9,7 @@ class ScannerPage extends StatefulWidget {
 }
 
 class _ScannerPageState extends State<ScannerPage> {
-  late final MobileScannerController _controller;
   bool _returnedBarcode = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = MobileScannerController(
-      autoStart: true,
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      facing: CameraFacing.back,
-      formats: const [
-        BarcodeFormat.code128,
-        BarcodeFormat.code39,
-        BarcodeFormat.code93,
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   void _onDetect(BarcodeCapture capture) {
     if (_returnedBarcode) return;
@@ -69,9 +47,6 @@ class _ScannerPageState extends State<ScannerPage> {
                   alignment: Alignment.center,
                   children: [
                     MobileScanner(
-                      controller: _controller,
-                      scanWindow: scanWindow,
-                      scanWindowUpdateThreshold: 10,
                       onDetect: _onDetect,
                       onDetectError: (error, stackTrace) {
                         debugPrint('Barcode detection error: $error');
@@ -79,11 +54,33 @@ class _ScannerPageState extends State<ScannerPage> {
                       errorBuilder: (context, error) => Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
-                          child: Text(
-                            'Camera could not start: ${error.errorCode.name}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Camera could not start: ${error.errorCode.name}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              if (error.errorDetails?.message != null)
+                                Text(
+                                  error.errorDetails!.message!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Check camera permission in phone Settings, then reopen this screen.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ],
                           ),
+                        ),
+                      ),
+                      placeholderBuilder: (_) => const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFB8EA68),
                         ),
                       ),
                     ),
@@ -108,11 +105,11 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
           ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(24, 22, 24, 34),
+            padding: EdgeInsets.fromLTRB(24, 18, 24, 30),
             child: Column(
               children: [
                 Icon(Icons.center_focus_strong, color: Color(0xFFB8EA68)),
-                SizedBox(height: 10),
+                SizedBox(height: 8),
                 Text(
                   'Point the camera at the barcode',
                   textAlign: TextAlign.center,
@@ -124,7 +121,7 @@ class _ScannerPageState extends State<ScannerPage> {
                 ),
                 SizedBox(height: 5),
                 Text(
-                  'Supports Code 128 and Code 39, including IW25030199.',
+                  'If the barcode is not visible, go back and choose Show nearby beacons.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xFFB4C7BC), fontSize: 12),
                 ),

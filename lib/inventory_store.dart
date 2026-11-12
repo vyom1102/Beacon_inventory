@@ -23,6 +23,8 @@ class ScanRecord {
     required this.reference,
     required this.remarks,
     required this.bluetoothId,
+    required this.isActive,
+    required this.batteryPercent,
     required this.scannedAt,
   });
 
@@ -35,6 +37,8 @@ class ScanRecord {
   final String reference;
   final String remarks;
   final String bluetoothId;
+  final bool? isActive;
+  final int? batteryPercent;
   final DateTime scannedAt;
 
   factory ScanRecord.fromMap(Map<String, Object?> row) => ScanRecord(
@@ -49,6 +53,10 @@ class ScanRecord {
     reference: (row['reference'] as String?) ?? '',
     remarks: (row['remarks'] as String?) ?? '',
     bluetoothId: (row['bluetooth_id'] as String?) ?? '',
+    isActive: row['is_active'] == null
+        ? null
+        : row['is_active'] == 1 || row['is_active'] == true,
+    batteryPercent: row['battery_percent'] as int?,
     scannedAt: DateTime.parse(row['scanned_at']! as String),
   );
 }
@@ -65,7 +73,7 @@ class InventoryStore {
     final databasePath = await getDatabasesPath();
     _database = await openDatabase(
       p.join(databasePath, _databaseName),
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE scans (
@@ -78,6 +86,8 @@ class InventoryStore {
             reference TEXT NOT NULL DEFAULT '',
             remarks TEXT NOT NULL DEFAULT '',
             bluetooth_id TEXT NOT NULL DEFAULT '',
+            is_active INTEGER,
+            battery_percent INTEGER,
             scanned_at TEXT NOT NULL
           )
         ''');
@@ -104,6 +114,12 @@ class InventoryStore {
             "ALTER TABLE scans ADD COLUMN bluetooth_id TEXT NOT NULL DEFAULT ''",
           );
         }
+        if (oldVersion < 5) {
+          await db.execute('ALTER TABLE scans ADD COLUMN is_active INTEGER');
+          await db.execute(
+            'ALTER TABLE scans ADD COLUMN battery_percent INTEGER',
+          );
+        }
       },
     );
     return _database!;
@@ -122,6 +138,8 @@ class InventoryStore {
     required String reference,
     required String remarks,
     required String bluetoothId,
+    required bool? isActive,
+    required int? batteryPercent,
     required MovementDirection direction,
   }) async {
     final db = await _db;
@@ -155,6 +173,8 @@ class InventoryStore {
         'bluetooth_id': bluetoothId.isNotEmpty
             ? bluetoothId
             : (previous.isEmpty ? '' : previous.first['bluetooth_id'] ?? ''),
+        'is_active': isActive == null ? null : (isActive ? 1 : 0),
+        'battery_percent': batteryPercent,
         'scanned_at': DateTime.now().toUtc().toIso8601String(),
       });
     });

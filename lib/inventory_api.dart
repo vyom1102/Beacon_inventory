@@ -51,6 +51,8 @@ class InventoryApi {
     required String reference,
     required String remarks,
     required String bluetoothId,
+    required bool? isActive,
+    required int? batteryPercent,
   }) async {
     // A stable request ID makes an HTTP retry safe if the response is lost.
     final requestId = '${DateTime.now().microsecondsSinceEpoch}-$barcode';
@@ -64,6 +66,8 @@ class InventoryApi {
       'reference': reference,
       'remarks': remarks,
       'bluetoothId': bluetoothId,
+      'isActive': isActive,
+      'batteryPercent': batteryPercent,
     });
   }
 
@@ -98,6 +102,8 @@ class InventoryApi {
     'reference': value['reference'],
     'remarks': value['remarks'],
     'bluetooth_id': value['bluetoothId'],
+    'is_active': value['isActive'],
+    'battery_percent': value['batteryPercent'],
     'scanned_at': value['recordedAt'],
   });
 }

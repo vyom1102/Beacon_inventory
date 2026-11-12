@@ -24,24 +24,19 @@ class _DashboardPageState extends State<DashboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    BeaconPresence.instance.start();
     _load();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      BeaconPresence.instance.start();
       _load();
-    } else if (state == AppLifecycleState.paused) {
-      BeaconPresence.instance.stop();
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    BeaconPresence.instance.stop();
     super.dispose();
   }
 
@@ -165,9 +160,13 @@ class _DashboardPageState extends State<DashboardPage>
                           builder: (context, _) => ListTile(
                             title: Text(scan.barcode),
                             subtitle: Text(
-                              scan.direction == MovementDirection.inbound
-                                  ? 'IN'
-                                  : 'OUT',
+                              '${scan.direction == MovementDirection.inbound ? 'IN' : 'OUT'} · '
+                              '${scan.isActive == null
+                                  ? 'BLE unknown'
+                                  : scan.isActive!
+                                  ? 'BLE active'
+                                  : 'BLE not detected'}'
+                              '${scan.batteryPercent == null ? '' : ' · Battery ~${scan.batteryPercent}%'}',
                             ),
                             trailing:
                                 BeaconPresence.instance.isActive(
@@ -222,6 +221,8 @@ class InventoryApiRecord {
     'reference': item['reference'],
     'remarks': item['remarks'],
     'bluetooth_id': item['bluetoothId'],
+    'is_active': item['isActive'],
+    'battery_percent': item['batteryPercent'],
     'scanned_at': item['recordedAt'],
   });
 }
@@ -275,6 +276,15 @@ class _BeaconHistoryPageState extends State<BeaconHistoryPage> {
                     : 'Not detected nearby',
               ),
             ),
+            if (scans.isNotEmpty)
+              Text(
+                'Last saved check: ${scans.first.isActive == null
+                    ? 'unknown'
+                    : scans.first.isActive!
+                    ? 'active'
+                    : 'not detected'}'
+                '${scans.first.batteryPercent == null ? '' : ' · Battery ~${scans.first.batteryPercent}%'}',
+              ),
             const SizedBox(height: 16),
             Text(
               scans.length == 1 &&

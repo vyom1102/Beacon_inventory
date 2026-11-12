@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:excel/excel.dart' hide Border;
@@ -11,6 +12,7 @@ import 'inventory_api.dart';
 import 'dashboard_page.dart';
 import 'beacon_presence.dart';
 import 'scanner_page.dart';
+import 'nearby_beacon_page.dart';
 
 const _forest = Color(0xFF173B32);
 const _lime = Color(0xFFB8EA68);
@@ -71,7 +73,8 @@ class InventoryPage extends StatefulWidget {
   State<InventoryPage> createState() => _InventoryPageState();
 }
 
-class _InventoryPageState extends State<InventoryPage> {
+class _InventoryPageState extends State<InventoryPage>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _venueController = TextEditingController();
   final _personController = TextEditingController();
@@ -105,6 +108,9 @@ class _InventoryPageState extends State<InventoryPage> {
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
+  Timer? _bluetoothCheckTimer;
+  bool _formVisible = true;
+  bool _appResumed = true;
 
   Map<String, ScanRecord> get _latestByBarcode {
     final latest = <String, ScanRecord>{};
@@ -117,11 +123,36 @@ class _InventoryPageState extends State<InventoryPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadScans();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkBluetooth());
+    _bluetoothCheckTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _checkBluetooth(),
+    );
+  }
+
+  void _checkBluetooth() {
+    if (mounted && _formVisible && _appResumed) {
+      BeaconPresence.instance.scanOnce();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    if (_appResumed) {
+      _checkBluetooth();
+    } else {
+      BeaconPresence.instance.stop();
+    }
   }
 
   @override
   void dispose() {
+    _bluetoothCheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    BeaconPresence.instance.stop();
     _venueController.dispose();
     _personController.dispose();
     _reasonController.dispose();
@@ -153,11 +184,35 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> _openScanner() async {
+    _formVisible = false;
+    await BeaconPresence.instance.stop();
+    if (!mounted) return;
     final barcode = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(builder: (_) => const ScannerPage()),
     );
-    if (!mounted || barcode == null) return;
+    _formVisible = true;
+    if (!mounted) return;
+    if (barcode == null) return;
     setState(() => _barcodeController.text = barcode);
+    final presence = BeaconPresence.instance;
+    final bluetoothId = _latestByBarcode[barcode]?.bluetoothId ?? '';
+    if (presence.match(barcode, bluetoothId: bluetoothId) == null) {
+      _checkBluetooth();
+    }
+  }
+
+  Future<void> _openNearbyBeacons() async {
+    _formVisible = false;
+    final beacon = await Navigator.of(context).push<NearbyBeacon>(
+      MaterialPageRoute<NearbyBeacon>(builder: (_) => const NearbyBeaconPage()),
+    );
+    await BeaconPresence.instance.stop();
+    _formVisible = true;
+    if (!mounted || beacon == null) return;
+    setState(() {
+      _barcodeController.text = beacon.name;
+      _bluetoothIdController.text = beacon.id;
+    });
   }
 
   Future<void> _saveScan() async {
@@ -167,8 +222,16 @@ class _InventoryPageState extends State<InventoryPage> {
       final save = InventoryApi.isConfigured
           ? InventoryApi().saveMovement
           : InventoryStore.instance.saveScan;
+      final barcode = _barcodeController.text.trim();
+      final bluetoothId = _bluetoothIdController.text.trim().isNotEmpty
+          ? _bluetoothIdController.text.trim()
+          : _latestByBarcode[barcode]?.bluetoothId ?? '';
+      final presence = BeaconPresence.instance;
+      final isActive = presence.hasRecentScan
+          ? presence.isActive(barcode, bluetoothId: bluetoothId)
+          : null;
       await save(
-        barcode: _barcodeController.text.trim(),
+        barcode: barcode,
         venue: _venueController.text.trim(),
         personName: _personController.text.trim(),
         reason: _selectedReason == 'Other'
@@ -176,7 +239,11 @@ class _InventoryPageState extends State<InventoryPage> {
             : _selectedReason!,
         reference: _referenceController.text.trim(),
         remarks: _remarksController.text.trim(),
-        bluetoothId: _bluetoothIdController.text.trim(),
+        bluetoothId: bluetoothId,
+        isActive: isActive,
+        batteryPercent: isActive == true
+            ? presence.batteryPercent(barcode, bluetoothId: bluetoothId)
+            : null,
         direction: _direction,
       );
       _barcodeController.clear();
@@ -525,6 +592,35 @@ class _InventoryPageState extends State<InventoryPage> {
                   validator: (value) =>
                       _required(value, 'Scan or enter a barcode.'),
                 ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openScanner,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text('Scan barcode with camera'),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openNearbyBeacons,
+                    icon: const Icon(Icons.bluetooth_searching),
+                    label: const Text(
+                      'Barcode not visible? Show nearby beacons',
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: BeaconPresence.instance.checking
+                        ? null
+                        : BeaconPresence.instance.scanOnce,
+                    icon: const Icon(Icons.radar_rounded),
+                    label: const Text('Check Bluetooth once (5 seconds)'),
+                  ),
+                ),
                 if (knownBeacon != null) ...[
                   const SizedBox(height: 7),
                   Text(
@@ -541,6 +637,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 TextFormField(
                   controller: _bluetoothIdController,
                   maxLength: 150,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     hintText:
                         'Use when the beacon does not advertise its barcode',
@@ -549,26 +646,98 @@ class _InventoryPageState extends State<InventoryPage> {
                 ),
                 AnimatedBuilder(
                   animation: BeaconPresence.instance,
-                  builder: (context, _) =>
-                      _barcodeController.text.trim().isNotEmpty &&
-                          BeaconPresence.instance.isActive(
-                            _barcodeController.text,
-                            bluetoothId:
-                                _bluetoothIdController.text.trim().isNotEmpty
-                                ? _bluetoothIdController.text.trim()
-                                : knownBeacon?.bluetoothId ?? '',
-                          )
-                      ? const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Beacon active · detected nearby',
+                  builder: (context, _) {
+                    final presence = BeaconPresence.instance;
+                    final barcode = _barcodeController.text.trim();
+                    if (barcode.isEmpty &&
+                        !presence.checking &&
+                        !presence.hasRecentScan &&
+                        presence.scanError == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final active = presence.isActive(
+                      barcode,
+                      bluetoothId: _bluetoothIdController.text.trim().isNotEmpty
+                          ? _bluetoothIdController.text.trim()
+                          : knownBeacon?.bluetoothId ?? '',
+                    );
+                    return Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            presence.checking
+                                ? 'Checking for nearby Bluetooth signal…'
+                                : presence.scanError != null
+                                ? presence.scanError!
+                                : barcode.isEmpty
+                                ? 'Bluetooth check complete · select a beacon below.'
+                                : active
+                                ? 'Beacon active · detected nearby'
+                                : !presence.hasRecentScan
+                                ? 'Bluetooth checks automatically while this form is open. You can also check now.'
+                                : 'Beacon not found in nearby scan results.',
                             style: TextStyle(
-                              color: Color(0xFF467B25),
+                              color: active && !presence.checking
+                                  ? const Color(0xFF467B25)
+                                  : const Color(0xFFA3432F),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        )
-                      : const SizedBox.shrink(),
+                          if (presence.hasRecentScan || presence.checking)
+                            Text(
+                              '${presence.nearby.length} IW beacon(s) found in this scan',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          if (active && !presence.checking)
+                            Text(
+                              presence.batteryPercent(
+                                        _barcodeController.text,
+                                        bluetoothId:
+                                            _bluetoothIdController.text,
+                                      ) ==
+                                      null
+                                  ? 'Battery unavailable in this advertisement.'
+                                  : 'Estimated battery: ~${presence.batteryPercent(_barcodeController.text, bluetoothId: _bluetoothIdController.text)}%',
+                            ),
+                          if (presence.nearby.isNotEmpty &&
+                              !presence.checking &&
+                              (barcode.isEmpty || !active)) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Nearby devices · tap a beacon to use its name and Bluetooth ID',
+                            ),
+                            ...presence.nearby
+                                .take(10)
+                                .map(
+                                  (device) => ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(
+                                      device.name.isEmpty
+                                          ? 'Unnamed device'
+                                          : device.name,
+                                    ),
+                                    subtitle: Text(device.id),
+                                    trailing: Text(
+                                      device.batteryPercent == null
+                                          ? '${device.rssi} dBm'
+                                          : '~${device.batteryPercent}%',
+                                    ),
+                                    onTap: () => setState(() {
+                                      if (device.name.isNotEmpty) {
+                                        _barcodeController.text = device.name;
+                                      }
+                                      _bluetoothIdController.text = device.id;
+                                    }),
+                                  ),
+                                ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 18),
                 SizedBox(
