@@ -61,7 +61,7 @@ class BeaconInventoryApp extends StatelessWidget {
           ),
         ),
       ),
-      home: DashboardPage(inventoryBuilder: (_) => const InventoryPage()),
+      home: const InventoryPage(),
     );
   }
 }
@@ -215,6 +215,17 @@ class _InventoryPageState extends State<InventoryPage>
     });
   }
 
+  Future<void> _openInventory() async {
+    _formVisible = false;
+    await BeaconPresence.instance.stop();
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const DashboardPage()));
+    _formVisible = true;
+    if (mounted) _loadScans();
+  }
+
   Future<void> _saveScan() async {
     if (!_formKey.currentState!.validate() || _saving) return;
     setState(() => _saving = true);
@@ -340,30 +351,29 @@ class _InventoryPageState extends State<InventoryPage>
 
   @override
   Widget build(BuildContext context) {
-    final latest = _latestByBarcode.values;
-    final currentIn = latest
-        .where((scan) => scan.direction == MovementDirection.inbound)
-        .length;
-    final currentOut = latest
-        .where((scan) => scan.direction == MovementDirection.outbound)
-        .length;
-
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Beacon scanner'),
+        actions: [
+          IconButton(
+            onPressed: _exportScans,
+            tooltip: 'Export scan history',
+            icon: const Icon(Icons.file_download_outlined),
+          ),
+          TextButton.icon(
+            onPressed: _openInventory,
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Inventory'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadScans,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
             children: [
-              _buildHeader(),
-              const SizedBox(height: 22),
-              _buildStats(
-                total: latest.length,
-                inCount: currentIn,
-                outCount: currentOut,
-                movements: _scans.length,
-              ),
-              const SizedBox(height: 18),
               _buildScanCard(),
               const SizedBox(height: 18),
               _buildRecentScans(),
@@ -371,88 +381,6 @@ class _InventoryPageState extends State<InventoryPage>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: _forest,
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: const Icon(Icons.radar_rounded, color: _lime, size: 28),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'BEACON / INVENTORY',
-                style: TextStyle(
-                  color: Color(0xFF6B9F58),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              SizedBox(height: 3),
-              Text(
-                'Beacon scanner',
-                style: TextStyle(
-                  color: Color(0xFF172B2B),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        IconButton.filledTonal(
-          onPressed: _exportScans,
-          tooltip: 'Export scan history',
-          icon: const Icon(Icons.file_download_outlined),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStats({
-    required int total,
-    required int inCount,
-    required int outCount,
-    required int movements,
-  }) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.72,
-      children: [
-        _StatCard(label: 'Total beacons', value: total, icon: Icons.qr_code_2),
-        _StatCard(
-          label: 'Currently in',
-          value: inCount,
-          icon: Icons.south_west_rounded,
-        ),
-        _StatCard(
-          label: 'Currently out',
-          value: outCount,
-          icon: Icons.north_east_rounded,
-        ),
-        _StatCard(
-          label: 'Movements logged',
-          value: movements,
-          icon: Icons.swap_horiz_rounded,
-        ),
-      ],
     );
   }
 
@@ -464,7 +392,7 @@ class _InventoryPageState extends State<InventoryPage>
         children: [
           const _SectionHeading(
             eyebrow: 'NEW MOVEMENT',
-            title: 'Scan a beacon',
+            title: 'Record movement',
           ),
           const SizedBox(height: 18),
           SegmentedButton<MovementDirection>(
@@ -492,6 +420,105 @@ class _InventoryPageState extends State<InventoryPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _fieldLabel('BEACON BARCODE'),
+                TextFormField(
+                  controller: _barcodeController,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 150,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. IW25',
+                    counterText: '',
+                  ),
+                  validator: (value) =>
+                      _required(value, 'Scan or enter a barcode.'),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openScanner,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text('Scan barcode with camera'),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openNearbyBeacons,
+                    icon: const Icon(Icons.bluetooth_searching),
+                    label: const Text('Barcode unreadable? Find beacon'),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: BeaconPresence.instance.scanOnce,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Check beacon signal again'),
+                ),
+                if (knownBeacon != null) ...[
+                  const SizedBox(height: 7),
+                  Text(
+                    'Existing beacon · currently ${knownBeacon.direction.label.toUpperCase()} · '
+                    'last seen at ${knownBeacon.venue}',
+                    style: const TextStyle(
+                      color: Color(0xFF43624A),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                AnimatedBuilder(
+                  animation: BeaconPresence.instance,
+                  builder: (context, _) {
+                    final presence = BeaconPresence.instance;
+                    final barcode = _barcodeController.text.trim();
+                    if (barcode.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final active = presence.isActive(
+                      barcode,
+                      bluetoothId: _bluetoothIdController.text.trim().isNotEmpty
+                          ? _bluetoothIdController.text.trim()
+                          : knownBeacon?.bluetoothId ?? '',
+                    );
+                    return Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            presence.checking
+                                ? 'Checking for nearby Bluetooth signal…'
+                                : presence.scanError != null
+                                ? presence.scanError!
+                                : active
+                                ? 'Beacon active · detected nearby'
+                                : !presence.hasRecentScan
+                                ? 'Bluetooth checks automatically while this form is open. You can also check now.'
+                                : 'Beacon not detected nearby.',
+                            style: TextStyle(
+                              color: active && !presence.checking
+                                  ? const Color(0xFF467B25)
+                                  : const Color(0xFFA3432F),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (active && !presence.checking)
+                            Text(
+                              presence.batteryPercent(
+                                        _barcodeController.text,
+                                        bluetoothId:
+                                            _bluetoothIdController.text,
+                                      ) ==
+                                      null
+                                  ? 'Battery unavailable in this advertisement.'
+                                  : 'Estimated battery: ~${presence.batteryPercent(_barcodeController.text, bluetoothId: _bluetoothIdController.text)}%',
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
                 _fieldLabel(
                   _direction == MovementDirection.inbound
                       ? 'FROM VENUE NAME'
@@ -573,171 +600,21 @@ class _InventoryPageState extends State<InventoryPage>
                     counterText: '',
                   ),
                 ),
-                const SizedBox(height: 14),
-                _fieldLabel('BEACON BARCODE'),
-                TextFormField(
-                  controller: _barcodeController,
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 150,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. IW25',
-                    counterText: '',
-                    suffixIcon: IconButton(
-                      onPressed: _openScanner,
-                      tooltip: 'Open camera scanner',
-                      icon: const Icon(Icons.qr_code_scanner_rounded),
-                    ),
-                  ),
-                  validator: (value) =>
-                      _required(value, 'Scan or enter a barcode.'),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _openScanner,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('Scan barcode with camera'),
-                  ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _openNearbyBeacons,
-                    icon: const Icon(Icons.bluetooth_searching),
-                    label: const Text(
-                      'Barcode not visible? Show nearby beacons',
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: BeaconPresence.instance.checking
-                        ? null
-                        : BeaconPresence.instance.scanOnce,
-                    icon: const Icon(Icons.radar_rounded),
-                    label: const Text('Check Bluetooth once (5 seconds)'),
-                  ),
-                ),
-                if (knownBeacon != null) ...[
-                  const SizedBox(height: 7),
-                  Text(
-                    'Existing beacon · currently ${knownBeacon.direction.label.toUpperCase()} · '
-                    'last seen at ${knownBeacon.venue}',
-                    style: const TextStyle(
-                      color: Color(0xFF43624A),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                _fieldLabel('BLUETOOTH ID / MAC (OPTIONAL)'),
-                TextFormField(
-                  controller: _bluetoothIdController,
-                  maxLength: 150,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Use when the beacon does not advertise its barcode',
-                    counterText: '',
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: BeaconPresence.instance,
-                  builder: (context, _) {
-                    final presence = BeaconPresence.instance;
-                    final barcode = _barcodeController.text.trim();
-                    if (barcode.isEmpty &&
-                        !presence.checking &&
-                        !presence.hasRecentScan &&
-                        presence.scanError == null) {
-                      return const SizedBox.shrink();
-                    }
-                    final active = presence.isActive(
-                      barcode,
-                      bluetoothId: _bluetoothIdController.text.trim().isNotEmpty
-                          ? _bluetoothIdController.text.trim()
-                          : knownBeacon?.bluetoothId ?? '',
-                    );
-                    return Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            presence.checking
-                                ? 'Checking for nearby Bluetooth signal…'
-                                : presence.scanError != null
-                                ? presence.scanError!
-                                : barcode.isEmpty
-                                ? 'Bluetooth check complete · select a beacon below.'
-                                : active
-                                ? 'Beacon active · detected nearby'
-                                : !presence.hasRecentScan
-                                ? 'Bluetooth checks automatically while this form is open. You can also check now.'
-                                : 'Beacon not found in nearby scan results.',
-                            style: TextStyle(
-                              color: active && !presence.checking
-                                  ? const Color(0xFF467B25)
-                                  : const Color(0xFFA3432F),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (presence.hasRecentScan || presence.checking)
-                            Text(
-                              '${presence.nearby.length} IW beacon(s) found in this scan',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          if (active && !presence.checking)
-                            Text(
-                              presence.batteryPercent(
-                                        _barcodeController.text,
-                                        bluetoothId:
-                                            _bluetoothIdController.text,
-                                      ) ==
-                                      null
-                                  ? 'Battery unavailable in this advertisement.'
-                                  : 'Estimated battery: ~${presence.batteryPercent(_barcodeController.text, bluetoothId: _bluetoothIdController.text)}%',
-                            ),
-                          if (presence.nearby.isNotEmpty &&
-                              !presence.checking &&
-                              (barcode.isEmpty || !active)) ...[
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Nearby devices · tap a beacon to use its name and Bluetooth ID',
-                            ),
-                            ...presence.nearby
-                                .take(10)
-                                .map(
-                                  (device) => ListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(
-                                      device.name.isEmpty
-                                          ? 'Unnamed device'
-                                          : device.name,
-                                    ),
-                                    subtitle: Text(device.id),
-                                    trailing: Text(
-                                      device.batteryPercent == null
-                                          ? '${device.rssi} dBm'
-                                          : '~${device.batteryPercent}%',
-                                    ),
-                                    onTap: () => setState(() {
-                                      if (device.name.isNotEmpty) {
-                                        _barcodeController.text = device.name;
-                                      }
-                                      _bluetoothIdController.text = device.id;
-                                    }),
-                                  ),
-                                ),
-                          ],
-                        ],
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: const Text('Advanced: Bluetooth ID'),
+                  children: [
+                    TextFormField(
+                      controller: _bluetoothIdController,
+                      maxLength: 150,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        hintText: 'Bluetooth ID or MAC address',
+                        counterText: '',
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 SizedBox(
@@ -772,13 +649,6 @@ class _InventoryPageState extends State<InventoryPage>
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Center(
-            child: Text(
-              'Camera scan or enter the barcode manually',
-              style: TextStyle(color: Color(0xFF87968B), fontSize: 11),
             ),
           ),
         ],
@@ -822,7 +692,7 @@ class _InventoryPageState extends State<InventoryPage>
               ),
             )
           else
-            ..._scans.take(30).map(_buildScanTile),
+            ..._scans.take(5).map(_buildScanTile),
         ],
       ),
     );
@@ -973,56 +843,5 @@ class _SectionHeading extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final int value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE5EBE4)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 15, color: const Color(0xFF78916F)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF82918A), fontSize: 11),
-              ),
-            ),
-          ],
-        ),
-        Text(
-          '$value',
-          style: const TextStyle(
-            color: Color(0xFF172B2B),
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -1,
-          ),
-        ),
-      ],
-    ),
   );
 }

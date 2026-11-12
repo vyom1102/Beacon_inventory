@@ -5,8 +5,7 @@ import 'inventory_api.dart';
 import 'inventory_store.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key, required this.inventoryBuilder});
-  final WidgetBuilder inventoryBuilder;
+  const DashboardPage({super.key});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -15,8 +14,6 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage>
     with WidgetsBindingObserver {
   Map<String, List<ScanRecord>> _venues = {};
-  int _inCount = 0;
-  int _outCount = 0;
   bool _loading = true;
   String? _error;
 
@@ -43,12 +40,8 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _load() async {
     try {
       final groups = <String, List<ScanRecord>>{};
-      var inCount = 0;
-      var outCount = 0;
       if (InventoryApi.isConfigured) {
         final data = await InventoryApi().dashboard();
-        inCount = data['inCount'] as int;
-        outCount = data['outCount'] as int;
         for (final group in data['venues'] as List) {
           final entry = group as Map<String, dynamic>;
           groups[entry['name'] as String] = (entry['beacons'] as List)
@@ -64,11 +57,6 @@ class _DashboardPageState extends State<DashboardPage>
           latest.putIfAbsent(scan.barcode, () => scan);
         }
         for (final scan in latest.values) {
-          if (scan.direction == MovementDirection.inbound) {
-            inCount++;
-          } else {
-            outCount++;
-          }
           final venue = scan.direction == MovementDirection.inbound
               ? 'Inventory'
               : scan.venue;
@@ -78,8 +66,6 @@ class _DashboardPageState extends State<DashboardPage>
       if (!mounted) return;
       setState(() {
         _venues = groups;
-        _inCount = inCount;
-        _outCount = outCount;
         _loading = false;
         _error = null;
       });
@@ -103,16 +89,6 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Beacon inventory')),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () async {
-        await Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: widget.inventoryBuilder));
-        _load();
-      },
-      icon: const Icon(Icons.qr_code_scanner),
-      label: const Text('Record movement'),
-    ),
     body: RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -131,19 +107,8 @@ class _DashboardPageState extends State<DashboardPage>
           if (_error != null)
             Text(_error!, style: const TextStyle(color: Colors.red)),
           if (!_loading && _error == null) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _countCard('Total beacons', _inCount + _outCount),
-                _countCard('In inventory', _inCount),
-                _countCard('Out', _outCount),
-                _countCard('Venues', _venues.length),
-              ],
-            ),
-            const SizedBox(height: 20),
             const Text(
-              'Venue wise inventory',
+              'Beacons by venue',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -185,26 +150,6 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           ],
         ],
-      ),
-    ),
-  );
-
-  Widget _countCard(String label, int value) => SizedBox(
-    width: (MediaQuery.sizeOf(context).width - 48) / 2,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label),
-            const SizedBox(height: 8),
-            Text(
-              '$value',
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
       ),
     ),
   );

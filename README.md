@@ -1,6 +1,6 @@
 # Beacon Inventory
 
-A native Flutter app for recording beacon movements on Android and iOS. The app scans Code 128, Code 39, and Code 93 barcodes with a camera scan window tuned for faster beacon reads, including identifiers such as `IW25030199`. Movement history is stored in a local SQLite database on the device.
+A native Flutter app for recording beacon movements on Android and iOS. The movement form opens first; the app bar's **Inventory** button opens the venue dashboard. The app scans Code 128, Code 39, and Code 93 barcodes with a camera scan window tuned for faster beacon reads, including identifiers such as `IW25030199`. Movement history is stored in a local SQLite database on the device.
 
 Each scan records its barcode, In/Out status, source or destination venue, responsible person's name, reason, optional reference and remarks, and timestamp. In and Out have the same reason choices as the linked inventory form, with an Other field for a custom reason. Repeating the same status for a beacon is blocked. Export the scan history as an Excel spreadsheet through the device's share sheet.
 
@@ -18,7 +18,7 @@ flutter devices
 flutter run
 ```
 
-Allow camera, Bluetooth, and (on Android) location access when prompted, and keep Bluetooth enabled. The camera scanner uses only the camera. Press **Barcode not visible? Show nearby beacons** to open a Bluetooth-only page; continuous BLE scanning runs while that page is open. It shows advertised beacon names at RSSI −50 dBm or stronger; tap a suggestion to use its name as the barcode and fill its Bluetooth ID. The movement form runs a five-second Bluetooth scan when it opens and every minute while it remains visible. The **Check Bluetooth once** button starts another five-second check on demand. Scanning stops before the camera opens. A detected signal confirms the beacon is advertising; zero devices or a missing match does not by itself prove that the beacon is faulty. On iPhone, the device must be paired with a Mac running Xcode.
+Allow camera, Bluetooth, and (on Android) location access when prompted, and keep Bluetooth enabled. The camera scanner uses only the camera. Press **Barcode unreadable? Find beacon** to open a Bluetooth-only picker; it shows nearby beacon names at RSSI −50 dBm or stronger. Tap a name to fill the barcode and Bluetooth ID. The movement form runs a five-second Bluetooth scan when it opens and every minute while it remains visible. **Check beacon signal again** starts another five-second check on demand. Scanning stops before the camera opens. A detected signal confirms the beacon is advertising; a missing match does not by itself prove that the beacon is faulty. On iPhone, the device must be paired with a Mac running Xcode.
 
 ## Build an installable package
 

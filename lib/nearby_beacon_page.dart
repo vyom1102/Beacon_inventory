@@ -44,7 +44,7 @@ class _NearbyBeaconPageState extends State<NearbyBeaconPage>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Nearby beacons')),
+    appBar: AppBar(title: const Text('Find beacon')),
     body: AnimatedBuilder(
       animation: BeaconPresence.instance,
       builder: (context, _) {
@@ -55,7 +55,7 @@ class _NearbyBeaconPageState extends State<NearbyBeaconPage>
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
-                'Scanning continuously while this page is open. Select a beacon at −50 dBm or stronger to use its name as the barcode.',
+                'If the barcode is unreadable, select the beacon name below.',
               ),
             ),
             if (presence.scanError != null)
@@ -68,7 +68,7 @@ class _NearbyBeaconPageState extends State<NearbyBeaconPage>
               ),
             Expanded(
               child: suggestions.isEmpty
-                  ? const Center(child: Text('Looking for nearby beacons…'))
+                  ? const Center(child: Text('Looking for your beacon…'))
                   : ListView.builder(
                       itemCount: suggestions.length,
                       itemBuilder: (context, index) {
@@ -76,10 +76,7 @@ class _NearbyBeaconPageState extends State<NearbyBeaconPage>
                         return ListTile(
                           leading: const Icon(Icons.bluetooth_searching),
                           title: Text(beacon.name),
-                          subtitle: Text(
-                            '${beacon.id} · ${beacon.rssi} dBm'
-                            '${beacon.batteryPercent == null ? '' : ' · Battery ~${beacon.batteryPercent}%'}',
-                          ),
+                          trailing: const Icon(Icons.chevron_right),
                           onTap: () => Navigator.of(context).pop(beacon),
                         );
                       },
